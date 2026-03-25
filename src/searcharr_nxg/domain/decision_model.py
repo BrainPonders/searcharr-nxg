@@ -25,6 +25,16 @@ class RadarrState(str, Enum):
     UNMONITORED_PRESENT = "A4"
 
 
+class SonarrState(str, Enum):
+    """Current Sonarr presence and file states."""
+
+    NOT_IN_SONARR = "S0"
+    MONITORED_MISSING = "S1"
+    UNMONITORED_MISSING = "S2"
+    MONITORED_PRESENT = "S3"
+    UNMONITORED_PRESENT = "S4"
+
+
 class Action(str, Enum):
     """User actions currently defined by the product design."""
 
@@ -89,6 +99,38 @@ def actions_for_state(radarr_state: RadarrState) -> Tuple[Action, ...]:
         ),
     }
     return mapping[radarr_state]
+
+
+def actions_for_sonarr_state(sonarr_state: SonarrState) -> Tuple[Action, ...]:
+    """Return the allowed actions for the given Sonarr state."""
+
+    mapping = {
+        SonarrState.NOT_IN_SONARR: (
+            Action.ADD_MOVIE,
+            Action.ADD_AND_SEARCH,
+        ),
+        SonarrState.MONITORED_MISSING: (
+            Action.SEARCH_NOW,
+            Action.CHANGE_PROFILE,
+            Action.UNMONITOR,
+        ),
+        SonarrState.UNMONITORED_MISSING: (
+            Action.REMONITOR,
+            Action.SEARCH_NOW,
+            Action.CHANGE_PROFILE,
+        ),
+        SonarrState.MONITORED_PRESENT: (
+            Action.SEARCH_NOW,
+            Action.CHANGE_PROFILE,
+            Action.UNMONITOR,
+        ),
+        SonarrState.UNMONITORED_PRESENT: (
+            Action.REMONITOR,
+            Action.SEARCH_NOW,
+            Action.CHANGE_PROFILE,
+        ),
+    }
+    return mapping[sonarr_state]
 
 
 def watched_warning(ryot_state: RyotState) -> Optional[str]:

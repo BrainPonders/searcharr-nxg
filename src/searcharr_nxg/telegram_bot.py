@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+from html import escape as html_escape
 import logging
 from typing import TYPE_CHECKING, Dict, List, Sequence, Tuple
 
 from searcharr_nxg.domain.decision_model import Action
 from searcharr_nxg.integrations.radarr import RadarrOption
-from searcharr_nxg.integrations.tmdb import TmdbMovieCandidate
+from searcharr_nxg.integrations.tmdb import TmdbMovieCandidate, TmdbSeriesCandidate
 from searcharr_nxg.render import (
     action_label,
     render_candidate_browser_message,
@@ -15,10 +16,16 @@ from searcharr_nxg.render import (
     render_movie_action_result_message,
     render_movie_inspection_message,
     render_profile_selection_message,
+    render_series_action_result_message,
+    render_series_exclusion_override_message,
+    render_series_inspection_message,
+    render_series_profile_selection_message,
 )
 from searcharr_nxg.runtime import SearcharrRuntime
 from searcharr_nxg.services.movie_actions import resolve_quality_profile_choices
 from searcharr_nxg.services.movie_inspection import MovieInspectionReport
+from searcharr_nxg.services.series_actions import resolve_quality_profile_choices as resolve_series_quality_profile_choices
+from searcharr_nxg.services.series_inspection import SeriesInspectionReport
 
 if TYPE_CHECKING:
     from telegram import Update
@@ -41,20 +48,20 @@ def _select_callback() -> str:
     return _CALLBACK_SELECT
 
 
-def _action_callback(tmdb_id: int, action: Action) -> str:
-    return f"{_CALLBACK_ACTION}:{tmdb_id}:{action.value}"
+def _action_callback(medium: str, tmdb_id: int, action: Action) -> str:
+    return f"{_CALLBACK_ACTION}:{medium}:{tmdb_id}:{action.value}"
 
 
-def _profile_callback(tmdb_id: int, action: Action, profile_id: int) -> str:
-    return f"{_CALLBACK_PROFILE}:{tmdb_id}:{action.value}:{profile_id}"
+def _profile_callback(medium: str, tmdb_id: int, action: Action, profile_id: int) -> str:
+    return f"{_CALLBACK_PROFILE}:{medium}:{tmdb_id}:{action.value}:{profile_id}"
 
 
 def _cancel_callback(scope: str) -> str:
     return f"{_CALLBACK_CANCEL}:{scope}"
 
 
-def _continue_callback(tmdb_id: int, action: Action) -> str:
-    return f"{_CALLBACK_CONTINUE}:{tmdb_id}:{action.value}"
+def _continue_callback(medium: str, tmdb_id: int, action: Action) -> str:
+    return f"{_CALLBACK_CONTINUE}:{medium}:{tmdb_id}:{action.value}"
 
 
 def _parse_callback(data: str) -> Tuple[str, List[str]]:
@@ -70,13 +77,13 @@ def _tmdb_movie_url(tmdb_id: int) -> str:
     return f"https://www.themoviedb.org/movie/{tmdb_id}"
 
 
-def browser_button_rows(candidate: TmdbMovieCandidate) -> List[List[dict]]:
+def browser_button_rows(candidate: TmdbMovieCandidate | TmdbSeriesCandidate) -> List[List[dict]]:
     """Build browser controls for a single TMDB candidate."""
 
     return [
         [
             {"text": "<", "callback_data": _browse_callback(-1)},
-            {"text": "TMDB", "url": _tmdb_movie_url(candidate.tmdb_id)},
+            {"text": "TMDB", "url": candidate.tmdb_web_url},
             {"text": ">", "callback_data": _browse_callback(1)},
         ],
         [
@@ -86,11 +93,14 @@ def browser_button_rows(candidate: TmdbMovieCandidate) -> List[List[dict]]:
     ]
 
 
-def action_button_rows(report: MovieInspectionReport) -> List[List[dict]]:
+def action_button_rows(report: MovieInspectionReport, *, medium: str = "movie") -> List[List[dict]]:
     """Build button labels and callback payloads for allowed actions."""
 
     buttons = [
-        {"text": action_label(action), "callback_data": _action_callback(report.candidate.tmdb_id, action)}
+        {
+            "text": action_label(action, medium=medium),
+            "callback_data": _action_callback(medium, report.candidate.tmdb_id, action),
+        }
         for action in report.actions
     ]
     rows = [buttons[index:index + 2] for index in range(0, len(buttons), 2)]
@@ -98,16 +108,17 @@ def action_button_rows(report: MovieInspectionReport) -> List[List[dict]]:
     return rows
 
 
-def exclusion_button_rows(tmdb_id: int, action: Action) -> List[List[dict]]:
+def exclusion_button_rows(tmdb_id: int, action: Action, *, medium: str = "movie") -> List[List[dict]]:
     """Build manual override controls for excluded titles."""
 
     return [
-        [{"text": f"{action_label(action)} Anyway", "callback_data": _continue_callback(tmdb_id, action)}],
+        [{"text": f"{action_label(action, medium=medium)} Anyway", "callback_data": _continue_callback(medium, tmdb_id, action)}],
         [{"text": "Cancel", "callback_data": _cancel_callback("action")}],
     ]
 
 
 def profile_button_rows(
+    medium: str,
     tmdb_id: int,
     action: Action,
     options: Sequence[RadarrOption],
@@ -115,7 +126,7 @@ def profile_button_rows(
     """Build profile-selection controls for add/change-profile actions."""
 
     rows = [
-        [{"text": option.name, "callback_data": _profile_callback(tmdb_id, action, option.id)}]
+        [{"text": option.name, "callback_data": _profile_callback(medium, tmdb_id, action, option.id)}]
         for option in options
     ]
     rows.append([{"text": "Cancel", "callback_data": _cancel_callback("action")}])
@@ -146,19 +157,49 @@ def build_browser_keyboard(candidate: TmdbMovieCandidate):
 def build_action_keyboard(report: MovieInspectionReport):
     """Build the inline keyboard for allowed actions."""
 
-    return _build_inline_keyboard(action_button_rows(report))
+    return _build_inline_keyboard(action_button_rows(report, medium="movie"))
+
+
+def build_series_action_keyboard(report: SeriesInspectionReport):
+    """Build the inline keyboard for allowed series actions."""
+
+    return _build_inline_keyboard(action_button_rows(report, medium="series"))
 
 
 def build_profile_keyboard(tmdb_id: int, action: Action, options: Sequence[RadarrOption]):
     """Build the inline keyboard for profile selection."""
 
-    return _build_inline_keyboard(profile_button_rows(tmdb_id, action, options))
+    return _build_inline_keyboard(profile_button_rows("movie", tmdb_id, action, options))
+
+
+def build_series_profile_keyboard(tmdb_id: int, action: Action, options: Sequence[RadarrOption]):
+    """Build the inline keyboard for series profile selection."""
+
+    return _build_inline_keyboard(profile_button_rows("series", tmdb_id, action, options))
 
 
 def build_exclusion_keyboard(tmdb_id: int, action: Action):
     """Build the inline keyboard for excluded titles."""
 
-    return _build_inline_keyboard(exclusion_button_rows(tmdb_id, action))
+    return _build_inline_keyboard(exclusion_button_rows(tmdb_id, action, medium="movie"))
+
+
+def build_series_exclusion_keyboard(tmdb_id: int, action: Action):
+    """Build the inline keyboard for excluded series titles."""
+
+    return _build_inline_keyboard(exclusion_button_rows(tmdb_id, action, medium="series"))
+
+
+def format_callback_error(exc: Exception) -> str:
+    """Convert callback failures into HTML-safe, user-facing text."""
+
+    message = str(exc)
+    lowered = message.casefold()
+    if "sonarr" in lowered and ("nodename nor servname provided" in lowered or "failed to establish a new connection" in lowered):
+        return "Request failed: Sonarr is unreachable. Check VPN or DNS for sonarr.orion."
+    if "radarr" in lowered and ("nodename nor servname provided" in lowered or "failed to establish a new connection" in lowered):
+        return "Request failed: Radarr is unreachable. Check VPN or DNS for radarr.orion."
+    return f"Request failed: {html_escape(message)}"
 
 
 class TelegramBotService:
@@ -178,6 +219,7 @@ class TelegramBotService:
         dispatcher.add_handler(CommandHandler("start", self._handle_start))
         dispatcher.add_handler(CommandHandler("help", self._handle_help))
         dispatcher.add_handler(CommandHandler("movie", self._handle_movie))
+        dispatcher.add_handler(CommandHandler("series", self._handle_series))
         dispatcher.add_handler(CallbackQueryHandler(self._handle_callback))
 
         self.logger.info("Starting Telegram bot polling.")
@@ -187,13 +229,13 @@ class TelegramBotService:
     def _handle_start(self, update: "Update", context: "CallbackContext") -> None:
         self._reply(
             update,
-            "Searcharr-nxg is online.\nUse /movie &lt;title&gt; to browse a movie, then inspect the Orion stack.",
+            "Searcharr-nxg is online.\nUse /movie &lt;title&gt; to browse a movie, or /series &lt;title&gt; to browse a series, then inspect the Orion stack.",
         )
 
     def _handle_help(self, update: "Update", context: "CallbackContext") -> None:
         self._reply(
             update,
-            "Commands:\n/movie &lt;title&gt;  Browse TMDB candidates with posters, then inspect Ryot and Radarr state.",
+            "Commands:\n/movie &lt;title&gt;  Browse TMDB movie candidates.\n/series &lt;title&gt;  Browse TMDB series candidates, then inspect Sonarr state.",
         )
 
     def _handle_movie(self, update: "Update", context: "CallbackContext") -> None:
@@ -214,6 +256,34 @@ class TelegramBotService:
 
         self._close_previous_browser_state(context, update.effective_chat.id if update.effective_chat else 0)
         browser_state = {
+            "mode": "movie",
+            "query": query,
+            "index": 0,
+            "candidates": candidates,
+            "message_id": None,
+        }
+        self._set_browser_state(context, update.effective_chat.id if update.effective_chat else 0, browser_state)
+        self._send_candidate_card(update, browser_state)
+
+    def _handle_series(self, update: "Update", context: "CallbackContext") -> None:
+        query = " ".join(context.args or []).strip()
+        if not query:
+            self._reply(update, "Usage: /series &lt;title&gt;")
+            return
+
+        try:
+            candidates = list(self.runtime.search_series_candidates(query, limit=20))
+        except RuntimeError as exc:
+            self._reply(update, str(exc))
+            return
+
+        if not candidates:
+            self._reply(update, f'No TMDB series candidates found for "{query}".')
+            return
+
+        self._close_previous_browser_state(context, update.effective_chat.id if update.effective_chat else 0)
+        browser_state = {
+            "mode": "series",
             "query": query,
             "index": 0,
             "candidates": candidates,
@@ -237,20 +307,20 @@ class TelegramBotService:
                 self._handle_select_callback(query, context)
                 return
             if kind == _CALLBACK_ACTION:
-                self._handle_action_callback(query, Action(args[1]), int(args[0]))
+                self._handle_action_callback(query, args[0], Action(args[2]), int(args[1]))
                 return
             if kind == _CALLBACK_PROFILE:
-                self._handle_profile_callback(query, Action(args[1]), int(args[0]), args[2])
+                self._handle_profile_callback(query, args[0], Action(args[2]), int(args[1]), args[3])
                 return
             if kind == _CALLBACK_CONTINUE:
-                self._handle_continue_callback(query, Action(args[1]), int(args[0]))
+                self._handle_continue_callback(query, args[0], Action(args[2]), int(args[1]))
                 return
             if kind == _CALLBACK_CANCEL:
                 self._handle_cancel_callback(query, args[0] if args else "request")
                 return
         except (RuntimeError, ValueError) as exc:
             self.logger.warning("Telegram callback failed: %s", exc)
-            self._edit_message(query, f"Request failed: {exc}")
+            self._edit_message(query, format_callback_error(exc))
             return
 
         self._edit_message(query, "Unsupported callback payload.")
@@ -265,6 +335,14 @@ class TelegramBotService:
     def _handle_select_callback(self, query, context: "CallbackContext") -> None:
         browser_state = self._require_browser_state(context, query)
         candidate = browser_state["candidates"][browser_state["index"]]
+        if browser_state.get("mode") == "series":
+            report = self.runtime.inspect_tmdb_series(candidate.tmdb_id)
+            self._edit_message(
+                query,
+                render_series_inspection_message(report),
+                reply_markup=build_series_action_keyboard(report),
+            )
+            return
         report = self.runtime.inspect_tmdb_movie(candidate.tmdb_id)
         self._edit_message(
             query,
@@ -272,7 +350,10 @@ class TelegramBotService:
             reply_markup=build_action_keyboard(report),
         )
 
-    def _handle_action_callback(self, query, action: Action, tmdb_id: int) -> None:
+    def _handle_action_callback(self, query, medium: str, action: Action, tmdb_id: int) -> None:
+        if medium == "series":
+            self._handle_series_action_callback(query, action, tmdb_id)
+            return
         report = self.runtime.inspect_tmdb_movie(tmdb_id)
         if action in (Action.ADD_MOVIE, Action.ADD_AND_SEARCH) and report.radarr.is_excluded:
             self._edit_message(
@@ -303,7 +384,63 @@ class TelegramBotService:
             reply_markup=build_action_keyboard(refreshed),
         )
 
-    def _handle_continue_callback(self, query, action: Action, tmdb_id: int) -> None:
+    def _handle_series_action_callback(self, query, action: Action, tmdb_id: int) -> None:
+        report = self.runtime.inspect_tmdb_series(tmdb_id)
+        if action in (Action.ADD_MOVIE, Action.ADD_AND_SEARCH) and report.sonarr.is_excluded:
+            self._edit_message(
+                query,
+                render_series_exclusion_override_message(report, action),
+                reply_markup=build_series_exclusion_keyboard(tmdb_id, action),
+            )
+            return
+        if self._needs_quality_profile_selection(action):
+            options = self._series_quality_profile_options()
+            if len(options) > 1:
+                self._edit_message(
+                    query,
+                    render_series_profile_selection_message(report, action),
+                    reply_markup=build_series_profile_keyboard(tmdb_id, action, options),
+                )
+                return
+
+        preview = self.runtime.perform_series_action(
+            tmdb_id=tmdb_id,
+            action=action,
+            execute=True,
+        )
+        refreshed = self.runtime.inspect_tmdb_series(tmdb_id)
+        self._edit_message(
+            query,
+            f"{render_series_action_result_message(preview)}\n\n{render_series_inspection_message(refreshed)}",
+            reply_markup=build_series_action_keyboard(refreshed),
+        )
+
+    def _handle_continue_callback(self, query, medium: str, action: Action, tmdb_id: int) -> None:
+        if medium == "series":
+            if self._needs_quality_profile_selection(action):
+                report = self.runtime.inspect_tmdb_series(tmdb_id)
+                options = self._series_quality_profile_options()
+                if len(options) > 1:
+                    self._edit_message(
+                        query,
+                        render_series_profile_selection_message(report, action),
+                        reply_markup=build_series_profile_keyboard(tmdb_id, action, options),
+                    )
+                    return
+
+            preview = self.runtime.perform_series_action(
+                tmdb_id=tmdb_id,
+                action=action,
+                execute=True,
+            )
+            refreshed = self.runtime.inspect_tmdb_series(tmdb_id)
+            self._edit_message(
+                query,
+                f"{render_series_action_result_message(preview)}\n\n{render_series_inspection_message(refreshed)}",
+                reply_markup=build_series_action_keyboard(refreshed),
+            )
+            return
+
         report = self.runtime.inspect_tmdb_movie(tmdb_id)
         if self._needs_quality_profile_selection(action):
             options = self._quality_profile_options()
@@ -330,10 +467,26 @@ class TelegramBotService:
     def _handle_profile_callback(
         self,
         query,
+        medium: str,
         action: Action,
         tmdb_id: int,
         profile_id: str,
     ) -> None:
+        if medium == "series":
+            preview = self.runtime.perform_series_action(
+                tmdb_id=tmdb_id,
+                action=action,
+                execute=True,
+                quality_profile=profile_id,
+            )
+            refreshed = self.runtime.inspect_tmdb_series(tmdb_id)
+            self._edit_message(
+                query,
+                f"{render_series_action_result_message(preview)}\n\n{render_series_inspection_message(refreshed)}",
+                reply_markup=build_series_action_keyboard(refreshed),
+            )
+            return
+
         preview = self.runtime.perform_movie_action(
             tmdb_id=tmdb_id,
             action=action,
@@ -358,6 +511,14 @@ class TelegramBotService:
             raise RuntimeError("Radarr must be enabled to select quality profiles.")
         return resolve_quality_profile_choices(
             radarr_client=self.runtime.radarr_client,
+            settings_module=self.runtime.settings_module,
+        )
+
+    def _series_quality_profile_options(self) -> List[RadarrOption]:
+        if self.runtime.sonarr_client is None:
+            raise RuntimeError("Sonarr must be enabled to select quality profiles.")
+        return resolve_series_quality_profile_choices(
+            sonarr_client=self.runtime.sonarr_client,
             settings_module=self.runtime.settings_module,
         )
 
@@ -427,9 +588,9 @@ class TelegramBotService:
             raise RuntimeError("No Telegram message context was found.")
         state = self._get_browser_state(context, query.message.chat_id)
         if state is None:
-            raise RuntimeError("The movie browser expired. Start again with /movie <title>.")
+            raise RuntimeError("The search browser expired. Start again with /movie or /series.")
         if state.get("message_id") != query.message.message_id:
-            raise RuntimeError("This movie browser expired. Start again with /movie <title>.")
+            raise RuntimeError("This search browser expired. Start again with /movie or /series.")
         return state
 
     @staticmethod

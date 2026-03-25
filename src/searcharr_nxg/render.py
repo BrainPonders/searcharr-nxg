@@ -9,6 +9,8 @@ from typing import List
 from searcharr_nxg.domain.decision_model import Action
 from searcharr_nxg.services.movie_actions import MovieActionPreview
 from searcharr_nxg.services.movie_inspection import MovieInspectionReport
+from searcharr_nxg.services.series_actions import SeriesActionPreview
+from searcharr_nxg.services.series_inspection import SeriesInspectionReport
 
 
 ACTION_LABELS = {
@@ -117,9 +119,16 @@ def _format_size(size_bytes: int | None) -> str | None:
     return f"{gib:.1f} GB"
 
 
-def action_label(action: Action) -> str:
+def action_label(action: Action, *, medium: str = "movie") -> str:
     """Return a human-readable label for a product action."""
 
+    if medium == "series":
+        series_overrides = {
+            Action.ADD_MOVIE: "Add Series",
+            Action.ADD_AND_SEARCH: "Add + Search",
+        }
+        if action in series_overrides:
+            return series_overrides[action]
     return ACTION_LABELS.get(action, action.value)
 
 
@@ -224,7 +233,21 @@ def render_exclusion_override_message(report: MovieInspectionReport, action: Act
             render_movie_inspection_message(report),
             (
                 "<b>Radarr exclusion</b>\n"
-                f"This movie is excluded in Radarr. List imports will ignore it, but you can still use <b><code>{escape(action_label(action))} Anyway</code></b> as a manual override."
+                f"This movie is excluded in Radarr. List imports will ignore it, but you can still use <b><code>{escape(action_label(action, medium='movie'))} Anyway</code></b> as a manual override."
+            ),
+        ]
+    )
+
+
+def render_series_exclusion_override_message(report: SeriesInspectionReport, action: Action) -> str:
+    """Render the exclusion warning shown before add actions for series."""
+
+    return "\n\n".join(
+        [
+            render_series_inspection_message(report),
+            (
+                "<b>Sonarr exclusion</b>\n"
+                f"This series is excluded in Sonarr. List imports will ignore it, but you can still use <b><code>{escape(action_label(action, medium='series'))} Anyway</code></b> as a manual override."
             ),
         ]
     )
@@ -245,13 +268,96 @@ def render_candidate_browser_message(candidate, position: int, total: int) -> st
     return "\n".join(lines)
 
 
+def render_series_inspection_message(report: SeriesInspectionReport) -> str:
+    """Render a compact Ryot + Sonarr series summary for Telegram."""
+
+    candidate = report.candidate
+    sonarr = report.sonarr
+    lines: List[str] = [f"<b>{escape(candidate.title)} ({candidate.year or 'Unknown year'})</b>"]
+    if report.warning:
+        lines.extend(["", f"<b>Warning</b>\n{escape(report.warning)}"])
+    lines.extend(
+        [
+            "",
+            _field("Ryot", "Registered" if report.ryot.metadata_id is not None else "Not registered"),
+            _field("Watched", _format_watch_status(report.ryot.seen_by_user_count, report.ryot.last_finished_on)),
+            _field("Collections", _format_ryot_collections(report.ryot.collection_names)),
+            "",
+        ]
+    )
+    lines.extend(
+        [
+            _field("Sonarr", _format_sonarr_status_summary(sonarr)),
+            _field("Quality Profile", sonarr.quality_profile_name or "n/a"),
+            _field("Available", _format_sonarr_availability(sonarr)),
+        ]
+    )
+    return "\n".join(lines)
+
+
+def render_series_inspection(report: SeriesInspectionReport) -> str:
+    """Render a CLI-friendly series inspection summary."""
+
+    sonarr = report.sonarr
+    lines = [
+        f"{report.candidate.title} ({report.candidate.year or 'Unknown year'})",
+        "",
+        "Ryot",
+        f"- state: {report.ryot.state.value}",
+        f"- found: {_bool_label(report.ryot.metadata_id is not None)}",
+        f"- watched count: {report.ryot.seen_by_user_count}",
+        f"- last watched: {_format_summary_datetime(report.ryot.last_finished_on) if report.ryot.last_finished_on else 'n/a'}",
+        f"- collections: {', '.join(report.ryot.collection_names) if report.ryot.collection_names else 'n/a'}",
+        "",
+        "Sonarr",
+        f"- state: {sonarr.state.value}",
+        f"- monitored: {_bool_label(sonarr.monitored)}",
+        f"- quality profile: {sonarr.quality_profile_name or 'n/a'}",
+        f"- available: {_format_sonarr_availability(sonarr)}",
+        f"- excluded: {_bool_label(sonarr.is_excluded)}",
+    ]
+    return "\n".join(lines)
+
+
+def _format_sonarr_status_summary(sonarr) -> str:
+    if sonarr.state.value == "S0":
+        status = "Not in Sonarr"
+    else:
+        status = "Monitored" if sonarr.monitored else "Unmonitored"
+    if sonarr.is_excluded:
+        return f"{status} | Excluded"
+    return status
+
+
+def _format_sonarr_availability(sonarr) -> str:
+    if sonarr.episode_count and sonarr.episode_file_count:
+        size_label = _format_size(sonarr.size_bytes)
+        if size_label:
+            return f"{sonarr.episode_file_count}/{sonarr.episode_count} episodes ({size_label})"
+        return f"{sonarr.episode_file_count}/{sonarr.episode_count} episodes"
+    if sonarr.episode_count:
+        return f"0/{sonarr.episode_count} episodes"
+    return "Missing"
+
+
 def render_profile_selection_message(report: MovieInspectionReport, action: Action) -> str:
     """Render the profile-selection prompt under the current summary."""
 
     return "\n\n".join(
         [
             render_movie_inspection_message(report),
-            f"<b>Choose quality profile for {escape(action_label(action))}</b>",
+            f"<b>Choose quality profile for {escape(action_label(action, medium='movie'))}</b>",
+        ]
+    )
+
+
+def render_series_profile_selection_message(report: SeriesInspectionReport, action: Action) -> str:
+    """Render the series profile-selection prompt under the current summary."""
+
+    return "\n\n".join(
+        [
+            render_series_inspection_message(report),
+            f"<b>Choose quality profile for {escape(action_label(action, medium='series'))}</b>",
         ]
     )
 
@@ -266,6 +372,26 @@ def render_movie_action_result_message(preview: MovieActionPreview) -> str:
     details = _summarize_action_details(preview)
     if details.get("movie_id") is not None:
         lines.append(f"<b>Movie id</b>: {details['movie_id']}")
+    if details.get("command_name"):
+        command = details["command_name"]
+        if details.get("command_id") is not None:
+            command = f"{command} (id {details['command_id']})"
+        lines.append(f"<b>Command</b>: {escape(command)}")
+    if details.get("status"):
+        lines.append(f"<b>Status</b>: {escape(str(details['status']))}")
+    return "\n".join(lines)
+
+
+def render_series_action_result_message(preview: SeriesActionPreview) -> str:
+    """Render a compact Telegram-friendly series action result summary."""
+
+    lines = [
+        f"<b>Action</b>: {escape(action_label(preview.action, medium='series'))}",
+        f"<b>Result</b>: {escape(preview.message)}",
+    ]
+    details = _summarize_series_action_details(preview)
+    if details.get("series_id") is not None:
+        lines.append(f"<b>Series id</b>: {details['series_id']}")
     if details.get("command_name"):
         command = details["command_name"]
         if details.get("command_id") is not None:
@@ -337,4 +463,44 @@ def _summarize_action_details(preview: MovieActionPreview) -> dict:
     quality = ((movie_file.get("quality") or {}).get("quality") or {}).get("name")
     if quality:
         summary["current_quality"] = quality
+    return summary or details
+
+
+def _summarize_series_action_details(preview: SeriesActionPreview) -> dict:
+    if not preview.details:
+        return {}
+    if not preview.execute:
+        return preview.details
+
+    details = preview.details
+    if details.get("name") == "SeriesSearch" or "seriesId" in details:
+        summary = {}
+        if details.get("id") is not None:
+            summary["command_id"] = details["id"]
+        if details.get("name"):
+            summary["command_name"] = details["name"]
+        if details.get("status"):
+            summary["status"] = details["status"]
+        if details.get("seriesId") is not None:
+            summary["series_id"] = details["seriesId"]
+        return summary or details
+
+    summary = {}
+    series_id = details.get("id") or details.get("seriesId")
+    if series_id is not None:
+        summary["series_id"] = series_id
+    if details.get("title"):
+        summary["title"] = details["title"]
+    if details.get("tmdbId") is not None:
+        summary["tmdb_id"] = details["tmdbId"]
+    if details.get("tvdbId") is not None:
+        summary["tvdb_id"] = details["tvdbId"]
+    if details.get("monitored") is not None:
+        summary["monitored"] = details["monitored"]
+    if details.get("qualityProfileId") is not None:
+        summary["quality_profile_id"] = details["qualityProfileId"]
+    if details.get("rootFolderPath"):
+        summary["root_folder_path"] = details["rootFolderPath"]
+    elif details.get("path"):
+        summary["path"] = details["path"]
     return summary or details

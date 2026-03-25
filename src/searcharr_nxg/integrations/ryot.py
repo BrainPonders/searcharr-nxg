@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import List, Optional, Type
 
 from searcharr_nxg.domain.decision_model import RyotState
 from searcharr_nxg.http import HttpJsonClient
@@ -73,6 +73,20 @@ class RyotMovieRecord:
     collection_names: List[str]
 
 
+@dataclass(frozen=True)
+class RyotSeriesRecord:
+    """Normalized Ryot series state for a single title."""
+
+    state: RyotState
+    metadata_id: Optional[str]
+    title: Optional[str]
+    identifier: Optional[str]
+    seen_by_user_count: int
+    last_finished_on: Optional[str]
+    has_interacted: bool
+    collection_names: List[str]
+
+
 class RyotClient:
     """Ryot GraphQL client focused on movie inspection."""
 
@@ -93,7 +107,48 @@ class RyotClient:
         self.endpoint = f"{url.rstrip('/')}{graphql_path}"
 
     def inspect_movie(self, title: str, *, tmdb_id: Optional[int] = None) -> RyotMovieRecord:
-        metadata_ids = self._search_movie_ids(title)
+        return self._inspect_media(
+            title,
+            tmdb_id=tmdb_id,
+            lot="MOVIE",
+            record_type=RyotMovieRecord,
+        )
+
+    def inspect_series(self, title: str, *, tmdb_id: Optional[int] = None) -> RyotSeriesRecord:
+        """Inspect one series in Ryot using the TMDB show identifier when available."""
+
+        return self._inspect_media(
+            title,
+            tmdb_id=tmdb_id,
+            lot="SHOW",
+            record_type=RyotSeriesRecord,
+        )
+
+    def _search_metadata_ids(self, title: str, *, lot: str) -> List[str]:
+        payload = self._graphql(
+            METADATA_SEARCH_QUERY,
+            {
+                "input": {
+                    "lot": lot,
+                    "source": "TMDB",
+                    "search": {"query": title, "page": 1, "take": 5},
+                }
+            },
+        )
+        return list(
+            (((payload.get("metadataSearch") or {}).get("response") or {}).get("items"))
+            or []
+        )
+
+    def _inspect_media(
+        self,
+        title: str,
+        *,
+        tmdb_id: Optional[int],
+        lot: str,
+        record_type: Type[RyotMovieRecord] | Type[RyotSeriesRecord],
+    ) -> RyotMovieRecord | RyotSeriesRecord:
+        metadata_ids = self._search_metadata_ids(title, lot=lot)
         matched = None
 
         for metadata_id in metadata_ids:
@@ -104,7 +159,7 @@ class RyotClient:
                 break
 
         if matched is None:
-            return RyotMovieRecord(
+            return record_type(
                 state=RyotState.NOT_IN_RYOT,
                 metadata_id=None,
                 title=None,
@@ -140,7 +195,7 @@ class RyotClient:
         else:
             state = RyotState.IN_RYOT_NOT_WATCHED
 
-        return RyotMovieRecord(
+        return record_type(
             state=state,
             metadata_id=matched["id"],
             title=matched.get("title"),
@@ -149,22 +204,6 @@ class RyotClient:
             last_finished_on=last_finished_on,
             has_interacted=bool(user_details.get("hasInteracted")),
             collection_names=collection_names,
-        )
-
-    def _search_movie_ids(self, title: str) -> List[str]:
-        payload = self._graphql(
-            METADATA_SEARCH_QUERY,
-            {
-                "input": {
-                    "lot": "MOVIE",
-                    "source": "TMDB",
-                    "search": {"query": title, "page": 1, "take": 5},
-                }
-            },
-        )
-        return list(
-            (((payload.get("metadataSearch") or {}).get("response") or {}).get("items"))
-            or []
         )
 
     def _metadata_details(self, metadata_id: str) -> dict:

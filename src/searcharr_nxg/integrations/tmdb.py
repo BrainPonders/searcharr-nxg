@@ -37,6 +37,42 @@ class TmdbMovieCandidate:
         except ValueError:
             return None
 
+    @property
+    def tmdb_web_url(self) -> str:
+        return f"https://www.themoviedb.org/movie/{self.tmdb_id}"
+
+
+@dataclass(frozen=True)
+class TmdbSeriesCandidate:
+    """Minimal TMDB TV-series candidate used by Searcharr-nxg."""
+
+    tmdb_id: int
+    title: str
+    first_air_date: Optional[str]
+    overview: str
+    original_language: Optional[str]
+    poster_path: Optional[str]
+    tvdb_id: Optional[int] = None
+
+    @property
+    def poster_url(self) -> Optional[str]:
+        if not self.poster_path:
+            return None
+        return f"https://image.tmdb.org/t/p/w500{self.poster_path}"
+
+    @property
+    def year(self) -> Optional[int]:
+        if not self.first_air_date:
+            return None
+        try:
+            return int(self.first_air_date[:4])
+        except ValueError:
+            return None
+
+    @property
+    def tmdb_web_url(self) -> str:
+        return f"https://www.themoviedb.org/tv/{self.tmdb_id}"
+
 
 class TmdbClient:
     """Client for TMDB search and movie details."""
@@ -115,6 +151,52 @@ class TmdbClient:
         )
         return self._parse_candidate(payload)
 
+    def search_series(
+        self,
+        query: str,
+        *,
+        limit: int = 20,
+        first_air_date_year: Optional[int] = None,
+    ) -> List[TmdbSeriesCandidate]:
+        """Search TMDB TV results and rank them for poster browsing."""
+
+        raw_results = self._search_tv_payload(
+            query,
+            page=1,
+            first_air_date_year=first_air_date_year,
+        )
+        results = list(raw_results.get("results", []))
+        total_pages = int(raw_results.get("total_pages") or 1)
+
+        target_pool = max(limit * 3, 20)
+        for page in range(2, min(total_pages, 4) + 1):
+            if len(results) >= target_pool:
+                break
+            page_payload = self._search_tv_payload(
+                query,
+                page=page,
+                first_air_date_year=first_air_date_year,
+            )
+            results.extend(page_payload.get("results", []))
+
+        ranked = self._sort_series_results(
+            self._dedupe_by_tmdb_id(results),
+            first_air_date_year=first_air_date_year,
+        )
+        return [self._parse_series_candidate(item) for item in ranked[:limit]]
+
+    def get_series(self, tmdb_id: int) -> TmdbSeriesCandidate:
+        payload = self.http.get(
+            f"{self.base_url}/tv/{tmdb_id}",
+            headers=self._build_auth_headers(),
+            params={
+                **self._build_auth_params(),
+                "language": self.language,
+                "append_to_response": "external_ids",
+            },
+        )
+        return self._parse_series_candidate(payload)
+
     def _search_movie_payload(
         self,
         query: str,
@@ -134,6 +216,30 @@ class TmdbClient:
                 **(
                     {"primary_release_year": str(primary_release_year)}
                     if primary_release_year is not None
+                    else {}
+                ),
+            },
+        )
+
+    def _search_tv_payload(
+        self,
+        query: str,
+        *,
+        page: int,
+        first_air_date_year: Optional[int] = None,
+    ) -> dict:
+        return self.http.get(
+            f"{self.base_url}/search/tv",
+            headers=self._build_auth_headers(),
+            params={
+                **self._build_auth_params(),
+                "language": self.language,
+                "query": query,
+                "include_adult": "false",
+                "page": str(page),
+                **(
+                    {"first_air_date_year": str(first_air_date_year)}
+                    if first_air_date_year is not None
                     else {}
                 ),
             },
@@ -213,6 +319,25 @@ class TmdbClient:
         return deduped
 
     @staticmethod
+    def _sort_series_results(
+        results: List[dict],
+        *,
+        first_air_date_year: Optional[int] = None,
+    ) -> List[dict]:
+        def sort_key(item: dict):
+            first_air_date = item.get("first_air_date") or ""
+            year = 0
+            if len(first_air_date) >= 4 and first_air_date[:4].isdigit():
+                year = int(first_air_date[:4])
+            popularity = float(item.get("popularity") or 0.0)
+            vote_count = int(item.get("vote_count") or 0)
+            if first_air_date_year is not None:
+                return (-abs(year - first_air_date_year), year, first_air_date, popularity, vote_count)
+            return (year, first_air_date, popularity, vote_count)
+
+        return sorted(results, key=sort_key, reverse=True)
+
+    @staticmethod
     def _parse_candidate(item: dict) -> TmdbMovieCandidate:
         return TmdbMovieCandidate(
             tmdb_id=int(item["id"]),
@@ -221,4 +346,18 @@ class TmdbClient:
             overview=item.get("overview") or "",
             original_language=item.get("original_language"),
             poster_path=item.get("poster_path"),
+        )
+
+    @staticmethod
+    def _parse_series_candidate(item: dict) -> TmdbSeriesCandidate:
+        external_ids = item.get("external_ids") or {}
+        tvdb_id = external_ids.get("tvdb_id") or item.get("tvdb_id")
+        return TmdbSeriesCandidate(
+            tmdb_id=int(item["id"]),
+            title=item.get("name") or item.get("title") or "Unknown title",
+            first_air_date=item.get("first_air_date"),
+            overview=item.get("overview") or "",
+            original_language=item.get("original_language"),
+            poster_path=item.get("poster_path"),
+            tvdb_id=int(tvdb_id) if tvdb_id not in (None, "") else None,
         )

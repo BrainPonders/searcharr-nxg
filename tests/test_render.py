@@ -5,23 +5,28 @@ from __future__ import annotations
 import unittest
 
 from searcharr_nxg.domain.decision_model import Action
-from searcharr_nxg.integrations.tmdb import TmdbMovieCandidate
+from searcharr_nxg.domain.decision_model import SonarrState
+from searcharr_nxg.integrations.sonarr import SonarrSeriesRecord
+from searcharr_nxg.integrations.tmdb import TmdbMovieCandidate, TmdbSeriesCandidate
 from searcharr_nxg.render import (
     action_label,
     render_candidate_browser_message,
     render_movie_action_preview,
     render_movie_inspection_message,
+    render_series_inspection_message,
 )
 from searcharr_nxg.domain.decision_model import RadarrState, RyotState
 from searcharr_nxg.integrations.radarr import RadarrMovieRecord
-from searcharr_nxg.integrations.ryot import RyotMovieRecord
+from searcharr_nxg.integrations.ryot import RyotMovieRecord, RyotSeriesRecord
 from searcharr_nxg.services.movie_actions import MovieActionPreview
 from searcharr_nxg.services.movie_inspection import build_movie_inspection_report
+from searcharr_nxg.services.series_inspection import SeriesInspectionReport
 
 
 class RenderTests(unittest.TestCase):
     def test_action_label_is_human_readable(self) -> None:
         self.assertEqual(action_label(Action.ADD_AND_SEARCH), "Add + Search")
+        self.assertEqual(action_label(Action.ADD_MOVIE, medium="series"), "Add Series")
 
     def test_executed_movie_update_is_summarized(self) -> None:
         preview = MovieActionPreview(
@@ -131,6 +136,52 @@ class RenderTests(unittest.TestCase):
         self.assertIn("<b>Quality Profile:</b> <code>Movies &gt; 4K EN+FR</code>", rendered)
         self.assertIn("<b>Available:</b> <code>Missing</code>", rendered)
         self.assertNotIn("<b>Excluded:</b>", rendered)
+
+    def test_series_inspection_message_includes_ryot_and_sonarr(self) -> None:
+        candidate = TmdbSeriesCandidate(
+            tmdb_id=1399,
+            title="Game of Thrones",
+            first_air_date="2011-04-17",
+            overview="",
+            original_language="en",
+            poster_path="/x.jpg",
+            tvdb_id=121361,
+        )
+        ryot = RyotSeriesRecord(
+            state=RyotState.IN_RYOT_WATCHED,
+            metadata_id="series-1",
+            title="Game of Thrones",
+            identifier="1399",
+            seen_by_user_count=2,
+            last_finished_on="2024-02-01T21:30:00+00:00",
+            has_interacted=True,
+            collection_names=["Completed"],
+        )
+        sonarr = SonarrSeriesRecord(
+            state=SonarrState.MONITORED_PRESENT,
+            title="Game of Thrones",
+            monitored=True,
+            has_files=True,
+            quality_profile_id=7,
+            quality_profile_name="Shows > 4K EN+FR",
+            folder_path="/data/series",
+            tags=[],
+            size_bytes=1024 ** 3,
+            episode_file_count=73,
+            episode_count=73,
+            is_excluded=False,
+        )
+
+        rendered = render_series_inspection_message(
+            SeriesInspectionReport(candidate=candidate, ryot=ryot, sonarr=sonarr, warning="You already watched this series", actions=())
+        )
+
+        self.assertIn("<b>Ryot:</b> <code>Registered</code>", rendered)
+        self.assertIn("<b>Watched:</b> <code>2x | 01-Feb-2024 @ 21:30</code>", rendered)
+        self.assertIn("<b>Collections:</b> <code>Completed</code>", rendered)
+        self.assertIn("<b>Sonarr:</b> <code>Monitored</code>", rendered)
+        self.assertIn("<b>Quality Profile:</b> <code>Shows &gt; 4K EN+FR</code>", rendered)
+        self.assertIn("<b>Available:</b> <code>73/73 episodes (1.0 GB)</code>", rendered)
 
 
 if __name__ == "__main__":
