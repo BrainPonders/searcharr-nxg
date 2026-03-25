@@ -10,7 +10,7 @@ from searcharr_nxg.config import integration_summary, load_settings
 from searcharr_nxg.domain.decision_model import Action
 from searcharr_nxg.http import IntegrationError
 from searcharr_nxg.logging_utils import configure_logging
-from searcharr_nxg.render import render_movie_action_preview, render_movie_inspection
+from searcharr_nxg.render import render_movie_action_preview, render_movie_inspection, render_series_inspection
 from searcharr_nxg.runtime import SearcharrRuntime
 from searcharr_nxg.telegram_bot import run_telegram_bot
 
@@ -40,9 +40,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="Inspect a movie decision by searching TMDB with the provided title.",
     )
     parser.add_argument(
+        "--inspect-series",
+        help="Inspect a series decision by searching TMDB TV with the provided title.",
+    )
+    parser.add_argument(
         "--tmdb-id",
         type=int,
-        help="Inspect a movie decision using a specific TMDB movie id.",
+        help="Inspect a movie or series decision using a specific TMDB id.",
     )
     parser.add_argument(
         "--candidate-index",
@@ -103,6 +107,19 @@ def inspect_movie(args: argparse.Namespace, runtime: SearcharrRuntime) -> str:
     return render_movie_inspection(report)
 
 
+def inspect_series(args: argparse.Namespace, runtime: SearcharrRuntime) -> str:
+    """Inspect a series through TMDB and Sonarr."""
+
+    if args.tmdb_id:
+        report = runtime.inspect_tmdb_series(args.tmdb_id)
+    else:
+        report = runtime.inspect_series_query(
+            args.inspect_series or "",
+            candidate_index=args.candidate_index,
+        )
+    return render_series_inspection(report)
+
+
 def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
@@ -127,6 +144,9 @@ def main() -> int:
 
     try:
         runtime = SearcharrRuntime.from_settings(loaded_settings.module)
+        if args.inspect_series:
+            print(inspect_series(args, runtime))
+            return 0
         if args.inspect_movie or args.tmdb_id:
             print(inspect_movie(args, runtime))
             return 0

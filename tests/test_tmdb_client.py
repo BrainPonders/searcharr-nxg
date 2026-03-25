@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import unittest
 
-from searcharr_nxg.integrations.tmdb import TmdbClient
+from searcharr_nxg.integrations.tmdb import TmdbClient, TmdbSeriesCandidate
 
 
 class _FakeHttp:
@@ -197,6 +197,47 @@ class TmdbClientTests(unittest.TestCase):
 
         self.assertEqual([item.tmdb_id for item in results], [21])
         self.assertEqual(fake_http.params[0]["primary_release_year"], "1989")
+
+    def test_series_candidate_builds_tv_url(self) -> None:
+        candidate = TmdbSeriesCandidate(
+            tmdb_id=1399,
+            title="Game of Thrones",
+            first_air_date="2011-04-17",
+            overview="",
+            original_language="en",
+            poster_path=None,
+            tvdb_id=121361,
+        )
+
+        self.assertEqual(candidate.tmdb_web_url, "https://www.themoviedb.org/tv/1399")
+
+    def test_search_series_can_bias_to_first_air_year(self) -> None:
+        client = TmdbClient("plain-v3-key", timeout_seconds=15)
+        fake_http = _FakeHttp(
+            {
+                1: {
+                    "total_pages": 1,
+                    "results": [
+                        {
+                            "id": 31,
+                            "name": "Severance",
+                            "first_air_date": "2022-02-18",
+                            "overview": "",
+                            "original_language": "en",
+                            "poster_path": None,
+                            "popularity": 50,
+                            "vote_count": 100,
+                        }
+                    ],
+                }
+            }
+        )
+        client.http = fake_http
+
+        results = client.search_series("severance", limit=5, first_air_date_year=2022)
+
+        self.assertEqual([item.tmdb_id for item in results], [31])
+        self.assertEqual(fake_http.params[0]["first_air_date_year"], "2022")
 
 
 if __name__ == "__main__":

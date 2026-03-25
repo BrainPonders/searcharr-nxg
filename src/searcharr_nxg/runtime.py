@@ -12,9 +12,11 @@ from searcharr_nxg.domain.decision_model import Action
 from searcharr_nxg.integrations.radarr import RadarrClient
 from searcharr_nxg.integrations.ryot import RyotClient
 from searcharr_nxg.integrations.sonarr import SonarrClient
-from searcharr_nxg.integrations.tmdb import TmdbClient, TmdbMovieCandidate
+from searcharr_nxg.integrations.tmdb import TmdbClient, TmdbMovieCandidate, TmdbSeriesCandidate
 from searcharr_nxg.services.movie_actions import MovieActionPreview, preview_or_execute_movie_action
 from searcharr_nxg.services.movie_inspection import MovieInspectionReport, build_movie_inspection_report
+from searcharr_nxg.services.series_actions import SeriesActionPreview, preview_or_execute_series_action
+from searcharr_nxg.services.series_inspection import SeriesInspectionReport, build_series_inspection_report
 
 
 @dataclass(frozen=True)
@@ -102,6 +104,19 @@ class SearcharrRuntime:
             primary_release_year=primary_release_year,
         )
 
+    def search_series_candidates(self, query: str, *, limit: int = 20) -> Sequence[TmdbSeriesCandidate]:
+        """Search TMDB for TV-series candidates."""
+
+        query = query.strip()
+        if not query:
+            raise RuntimeError("A non-empty series query is required.")
+        normalized_query, first_air_date_year = _extract_query_year(query)
+        return self.tmdb_client.search_series(
+            normalized_query,
+            limit=limit,
+            first_air_date_year=first_air_date_year,
+        )
+
     def inspect_movie_query(
         self,
         query: str,
@@ -125,6 +140,53 @@ class SearcharrRuntime:
         candidate = self.tmdb_client.get_movie(tmdb_id)
         return self._build_report(candidate)
 
+    def inspect_series_query(
+        self,
+        query: str,
+        *,
+        candidate_index: int = 1,
+    ) -> SeriesInspectionReport:
+        """Inspect a series by TMDB search query."""
+
+        candidates = list(self.search_series_candidates(query, limit=20))
+        if not candidates:
+            raise RuntimeError("No TMDB series candidates were found for the provided query.")
+        if candidate_index < 1 or candidate_index > len(candidates):
+            raise RuntimeError(
+                f"candidate index {candidate_index} is out of range for {len(candidates)} TMDB results."
+            )
+        return self.inspect_tmdb_series(candidates[candidate_index - 1].tmdb_id)
+
+    def inspect_tmdb_series(self, tmdb_id: int) -> SeriesInspectionReport:
+        """Inspect a series by TMDB id."""
+
+        if self.sonarr_client is None:
+            raise RuntimeError("Sonarr must be enabled to inspect series.")
+        candidate = self.tmdb_client.get_series(tmdb_id)
+        ryot_record = None
+        if self.ryot_client is not None:
+            ryot_record = self.ryot_client.inspect_series(candidate.title, tmdb_id=candidate.tmdb_id)
+            ryot_record = replace(
+                ryot_record,
+                collection_names=_filter_collection_names(
+                    ryot_record.collection_names,
+                    getattr(
+                        self.settings_module,
+                        "ryot_visible_collections",
+                        ["Owned", "Completed", "In Progress"],
+                    ),
+                ),
+            )
+        sonarr_record = self.sonarr_client.inspect_series(
+            tvdb_id=candidate.tvdb_id,
+            tmdb_id=candidate.tmdb_id,
+        )
+        return build_series_inspection_report(
+            candidate,
+            ryot=ryot_record,
+            sonarr=sonarr_record,
+        )
+
     def perform_movie_action(
         self,
         *,
@@ -143,6 +205,30 @@ class SearcharrRuntime:
             action=action,
             report=report,
             radarr_client=self.radarr_client,
+            settings_module=self.settings_module,
+            execute=execute,
+            quality_profile=quality_profile,
+            root_folder=root_folder,
+        )
+
+    def perform_series_action(
+        self,
+        *,
+        tmdb_id: int,
+        action: Action,
+        execute: bool = False,
+        quality_profile: Optional[str] = None,
+        root_folder: Optional[str] = None,
+    ) -> SeriesActionPreview:
+        """Preview or execute a Sonarr-backed series action."""
+
+        if self.sonarr_client is None:
+            raise RuntimeError("Sonarr must be enabled to perform series actions.")
+        report = self.inspect_tmdb_series(tmdb_id)
+        return preview_or_execute_series_action(
+            action=action,
+            report=report,
+            sonarr_client=self.sonarr_client,
             settings_module=self.settings_module,
             execute=execute,
             quality_profile=quality_profile,
