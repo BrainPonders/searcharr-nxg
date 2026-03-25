@@ -46,29 +46,6 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push image
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: maintainer/docker/Dockerfile
-          push: true
-          tags: ${{ steps.tag.outputs.image_repo }}:${{ steps.tag.outputs.tag }}
-          build-args: |
-            BUILD_NUMBER=${{ github.run_number }}
-            VERSION=${{ steps.tag.outputs.tag }}
-          labels: |
-            org.opencontainers.image.title=Searcharr-nxg
-            org.opencontainers.image.description=Ryot-centric Telegram request system for Radarr and Sonarr
-            org.opencontainers.image.source=https://github.com/${{ github.repository }}
-            org.opencontainers.image.version=${{ steps.tag.outputs.tag }}
-            org.opencontainers.image.revision=${{ github.sha }}
-
-      - name: Create GitHub release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ steps.tag.outputs.tag }}
-          generate_release_notes: true
-
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -87,14 +64,38 @@ jobs:
           set -euo pipefail
           python -m unittest discover -s tests -v
 
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: maintainer/docker/Dockerfile
+          push: true
+          platforms: linux/amd64,linux/arm64
+          tags: ${{ steps.tag.outputs.image_repo }}:${{ steps.tag.outputs.tag }}
+          build-args: |
+            BUILD_NUMBER=${{ github.run_number }}
+            VERSION=${{ steps.tag.outputs.tag }}
+          labels: |
+            org.opencontainers.image.title=Searcharr-nxg
+            org.opencontainers.image.description=Ryot-centric Telegram request system for Radarr and Sonarr
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.version=${{ steps.tag.outputs.tag }}
+            org.opencontainers.image.revision=${{ github.sha }}
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          generate_release_notes: true
+
       - name: Update available versions
         shell: bash
         env:
           PROJECT_IMAGE_REPO: ${{ steps.tag.outputs.image_repo }}
         run: |
           set -euo pipefail
-          git checkout main
-          git pull --ff-only origin main
+          git fetch origin main
+          git checkout origin/main -- README.md docker/compose/.env.example
           python maintainer/release/update_available_versions.py
 
       - name: Commit updated version table
@@ -108,4 +109,4 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add README.md docker/compose/.env.example
           git commit -m "Update available versions for ${GITHUB_REF_NAME}"
-          git push origin main
+          git push origin HEAD:main

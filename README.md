@@ -149,7 +149,7 @@ If your Arr and Ryot services are reachable on a shared Docker network, add the 
 Create `~/searcharr-nxg/.env` with at least:
 
 ```env
-PROJECT_IMAGE=ghcr.io/brainponders/searcharr-nxg:v0.1.0
+PROJECT_IMAGE=ghcr.io/brainponders/searcharr-nxg:v1.0.0
 PROJECT_CONTAINER_NAME=searcharr-nxg
 PROJECT_SETTINGS_FILE=./config/settings.py
 ```
@@ -189,7 +189,7 @@ The container starts the `searcharr-nxg` command by default. If `tgram_token` is
 
 | Variable | Description | Example |
 | --- | --- | --- |
-| `PROJECT_IMAGE` | Pinned Searcharr-nxg image tag | `ghcr.io/brainponders/searcharr-nxg:v0.1.0` |
+| `PROJECT_IMAGE` | Pinned Searcharr-nxg image tag | `ghcr.io/brainponders/searcharr-nxg:v1.0.0` |
 | `PROJECT_CONTAINER_NAME` | Container name override | `searcharr-nxg` |
 | `PROJECT_SETTINGS_FILE` | Local settings bind mount source | `./config/settings.py` |
 | `SEARCHARR_SETTINGS_FILE` | In-container settings path | `/app/settings.py` |

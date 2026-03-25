@@ -100,7 +100,7 @@ def default_stable_example(parsed: list[dict]) -> str:
     stable = select_latest(parsed, "stable")
     if stable:
         return stable["tag"]
-    return "v0.1.0"
+    return "v1.0.0"
 
 
 def update_readme(parsed: list[dict], stable_example_tag: str):
