@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "searcharr-nxg"
-version = "0.1.0"
+version = "1.0.0"
 description = "Ryot-centric Telegram request system for media automation"
 authors = [{name = "BrainPonders"}]
 readme = "README.md"

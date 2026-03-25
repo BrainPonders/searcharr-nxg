@@ -36,7 +36,7 @@ fi
 if [ -z "$PROJECT_IMAGE_TAG" ]; then
     echo "ERROR: PROJECT_IMAGE_TAG is required."
     echo "Example:"
-    echo "  PROJECT_IMAGE_TAG=v0.1.0 bash maintainer/release/release.sh"
+    echo "  PROJECT_IMAGE_TAG=v1.0.0 bash maintainer/release/release.sh"
     exit 1
 fi
 

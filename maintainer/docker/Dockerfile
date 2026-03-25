@@ -28,6 +28,8 @@ ENV SEARCHARR_SETTINGS_FILE=/app/settings.py
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
+USER root
+
 WORKDIR /app
 
 COPY pyproject.toml README.md requirements.txt ./
@@ -35,11 +37,12 @@ COPY src ./src
 COPY lang ./lang
 
 RUN set -eux; \
-    python -m pip install --upgrade pip; \
     python -m pip install --no-cache-dir .
 
 RUN mkdir -p /app/data && chown -R 1000:1000 /app
 COPY maintainer/docker/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
+USER 1000:1000
 
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]

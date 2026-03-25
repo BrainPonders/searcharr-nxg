@@ -89,6 +89,7 @@ jobs:
           generate_release_notes: true
 
       - name: Update available versions
+        continue-on-error: true
         shell: bash
         env:
           PROJECT_IMAGE_REPO: ${{ steps.tag.outputs.image_repo }}
@@ -99,6 +100,7 @@ jobs:
           python maintainer/release/update_available_versions.py
 
       - name: Commit updated version table
+        continue-on-error: true
         shell: bash
         run: |
           set -euo pipefail
