@@ -1,0 +1,73 @@
+# Local Codex policy files
+AGENTS.md
+AGEND.md
+AGENT.md
+
+# Local-only safety bucket
+.local/
+
+# Local maintainer and documentation overlays
+maintainer/*.local.md
+maintainer/**/*.local.md
+documentation/*.local.md
+documentation/**/*.local.md
+
+# Local environment and runtime files
+.env
+.env.local
+.env.*.local
+settings.py
+settings.local.py
+docker/compose/.env
+docker/compose/.env.dev
+docker-compose.override.yml
+compose.override.yml
+*.log
+*.tmp
+*.temp
+tmp/
+temp/
+
+# Local deployment notes and generated test artifacts
+maintainer/test/*.local.*
+maintainer/test/local-*/
+
+# Local build caches and artifacts
+.buildx-cache/
+dist/
+build/
+coverage/
+htmlcov/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+.venv.broken-*/
+venv/
+env/
+ENV/
+.python-version
+
+# Node.js
+node_modules/
+.vite/
+
+# Databases and runtime state
+*.db
+*.sqlite
+*.sqlite3
+
+# IDE and editor files
+.idea/
+.vscode/
+.vscode/*.local.json
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+.directory

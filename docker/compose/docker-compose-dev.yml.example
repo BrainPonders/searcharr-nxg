@@ -1,0 +1,27 @@
+# owner: project maintainer
+# date: 2026-03-23
+# service: searcharr-nxg
+# purpose: development compose example used by maintainer/dev-build.sh
+# docs: maintainer/development/README.md, docker/compose/.env.dev.example
+# deployment notes:
+#   - The generated runtime copy is intended to live outside the repository.
+#   - The scaffold runtime is suitable for bootstrap checks, not for feature-complete service validation.
+# history:
+#   - 2026-03-10: Initialized generic template example.
+#   - 2026-03-23: Adapted the example for Searcharr-nxg.
+
+services:
+  app:
+    image: ${PROJECT_IMAGE}
+    container_name: ${PROJECT_DEV_CONTAINER_NAME:-searcharr-nxg-dev}
+    restart: unless-stopped
+
+    env_file:
+      - .env
+
+    environment:
+      SEARCHARR_SETTINGS_FILE: /app/settings.py
+
+    volumes:
+      - "${PROJECT_SETTINGS_FILE:-./config/settings.py}:/app/settings.py:ro"
+      - ./data:/app/data

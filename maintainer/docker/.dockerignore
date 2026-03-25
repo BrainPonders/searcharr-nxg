@@ -1,0 +1,32 @@
+# Git and local-only policy
+.git
+.gitignore
+.local/
+AGENTS.md
+AGEND.md
+AGENT.md
+
+# Local env and runtime files
+.env
+.env.local
+docker/compose/.env
+docker/compose/.env.dev
+*.log
+*.tmp
+
+# Build noise
+node_modules/
+dist/
+build/
+coverage/
+htmlcov/
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Editors and OS files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

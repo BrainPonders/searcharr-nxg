@@ -1,0 +1,2 @@
+[console_scripts]
+searcharr-nxg = searcharr_nxg.main:main
