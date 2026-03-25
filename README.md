@@ -2,7 +2,7 @@
 
 ![GitHub release](https://img.shields.io/github/v/release/brainponders/searcharr-nxg)
 ![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/brainponders/searcharr-nxg/release.yml?label=release)
-![License](https://img.shields.io/github/license/brainponders/searcharr-nxg)
+[![License](https://img.shields.io/github/license/BrainPonders/searcharr-nxg)](LICENSE)
 ![GitHub stars](https://img.shields.io/github/stars/brainponders/searcharr-nxg)
 
 <br>
