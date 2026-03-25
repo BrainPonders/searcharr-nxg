@@ -61,7 +61,7 @@ Searcharr-nxg currently consists of a Python backend with Telegram as the user i
 
 ```text
 Application:
-├── Python 3.13
+├── Python 3.12
 ├── python-telegram-bot
 ├── requests
 └── unittest
@@ -73,7 +73,7 @@ Integrations:
 └── Sonarr API
 
 Container:
-└── 11notes/python:3.13
+└── 11notes/python:3.12
 ```
 
 ---

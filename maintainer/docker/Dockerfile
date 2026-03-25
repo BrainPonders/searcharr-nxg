@@ -11,7 +11,7 @@
 #   - 2026-03-23: Adapted the image for the Searcharr-nxg Python service runtime.
 #   - 2026-03-25: Rebased on 11notes/python for the public release path.
 
-FROM 11notes/python:3.13
+FROM 11notes/python:3.12
 
 ARG BUILD_NUMBER=local
 ARG VERSION=dev-local
