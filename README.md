@@ -1,59 +1,88 @@
+<p><em>Ryot-centric Telegram control layer for Radarr and Sonarr.</em></p>
+
+![GitHub release](https://img.shields.io/github/v/release/brainponders/searcharr-nxg)
+![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/brainponders/searcharr-nxg/release.yml?label=release)
+![License](https://img.shields.io/github/license/brainponders/searcharr-nxg)
+![GitHub stars](https://img.shields.io/github/stars/brainponders/searcharr-nxg)
+
+<br>
+
 # Searcharr-nxg
 
-Searcharr-nxg is a Ryot-centric request system for media automation.
+Searcharr-nxg is a Telegram-driven request system for movie and series automation. It originated from the Searcharr idea space, but is now reworked around a Ryot-first decision model and a cleaner standalone project structure. Instead of treating Radarr or Sonarr as the main source of truth, Searcharr-nxg starts each decision from Ryot, combines that long-term history with current Arr state, and then exposes deliberate actions such as add, re-monitor, search now, or change profile.
 
-Instead of treating Radarr or Sonarr as the source of truth, Searcharr-nxg starts each user decision from Ryot, then combines that long-term history with current Arr state before offering an action. The result is a Telegram-driven control layer that can warn about previously watched media, avoid duplicate downloads, and expose deliberate actions such as add, re-monitor, search now, or change profile.
+The result is a stricter and more context-aware request flow:
+- warn when something was already watched
+- surface whether a title is currently in Radarr or Sonarr
+- keep exclusions visible without blocking intentional manual overrides
+- present the current quality profile and availability before an action is taken
 
-## Current Status
+<br>
 
-This repository is a clean development workspace reset around the Searcharr-nxg architecture.
+### Why use Searcharr-nxg?
 
-- Product direction, state model, and maintainer workflow are documented.
-- The Python package now includes a first-pass movie inspection flow across TMDB, Ryot, and Radarr.
-- Movie actions can be previewed and executed against Radarr.
-- A first Telegram polling runtime is implemented for movie search, decision display, and action buttons.
+Searcharr-nxg fills the gap between media history and media execution:
 
-## System Model
+- **Ryot-first decisions:** watched state and selected collections are checked before an action is shown
+- **Current Arr visibility:** monitored state, profile, file availability, and exclusions are surfaced up front
+- **Telegram-first control:** poster browsing and action buttons are often faster than opening the Arr UI for each request
 
-- Ryot is the long-term memory and decision anchor.
-- Radarr is the movie execution layer and current-availability cache.
-- Sonarr is planned as a future extension.
-- TMDB provides search and metadata candidates.
-- Telegram is the user interface.
+<br>
 
-## Quick Start
+## Architecture
 
-1. Create and activate a Python virtual environment.
-2. Install the package in editable mode: `pip install -e .`
-3. Create a local `settings.py`.
-4. Fill in at least the Telegram, TMDB, Ryot, and Radarr settings.
-5. Run a bootstrap check with `searcharr-nxg --dry-run`.
-6. Inspect a movie decision with `searcharr-nxg --inspect-movie "Spider-Man 2"`.
-7. Start the Telegram bot with `searcharr-nxg --telegram-bot` or simply `searcharr-nxg` when `tgram_token` is configured.
+Searcharr-nxg currently consists of a Python backend with Telegram as the user interface.
 
-The Telegram MVP currently supports `/start`, `/help`, and `/movie <title>`, then lets the user choose a TMDB candidate and execute one of the allowed movie actions.
+```text
+┌────────────────────────────────────┐
+│          Telegram Bot UI           │
+│ Poster browser · Summary · Actions │
+└──────────────────┬─────────────────┘
+                   │
+┌──────────────────▼─────────────────┐
+│          Searcharr-nxg             │
+│ Decision model · Runtime           │
+│ Ryot lookup · TMDB lookup          │
+│ Radarr / Sonarr action routing     │
+└───────────────┬───────────┬────────┘
+                │           │
+      ┌─────────▼──────┐ ┌──▼──────────┐
+      │      Ryot      │ │    TMDB     │
+      │ History / tags │ │ Search data │
+      └────────────────┘ └─────────────┘
+                │
+     ┌──────────▼──────────┐
+     │  Radarr / Sonarr    │
+     │ Execution + state   │
+     └─────────────────────┘
+```
 
-## Repository Layout
+**Technology Stack**
 
-- `src/searcharr_nxg/` contains the Python package scaffold and decision-model primitives.
-- `documentation/` contains tracked product and governance documents.
-- `maintainer/` contains tracked maintainer workflow, dev-build, release, and smoke-check material.
-- `docker/compose/` contains runtime example files for future containerized deployment.
-- `lang/` contains upstream language resources retained from Searcharr lineage.
-- `.local/` is the ignored local-only safety bucket.
+```text
+Application:
+├── Python 3.13
+├── python-telegram-bot
+├── requests
+└── unittest
 
-## Reference Lineage
+Integrations:
+├── Ryot GraphQL API
+├── TMDB API
+├── Radarr API
+└── Sonarr API
 
-- Baseline lineage: `BrainPonders/searcharr-ngx`
-- Patch source to mine selectively: `ishan190425/searcharr`
+Container:
+└── 11notes/python:3.13
+```
 
-Searcharr-nxg is not a direct in-place continuation of those repositories. They are reference inputs for behavior and integration patterns, while this workspace is organized around a cleaner template and the Ryot-centric design.
+---
 
 <!-- BEGIN: AVAILABLE_VERSIONS -->
 ## Available Versions
 
-This optional section can be updated from Git tags.
-Edit or replace `maintainer/release/update_available_versions.py` if the project adopts a different release model.
+This section is updated automatically from published Git tags.
+`latest` is intentionally not used.
 
 | Channel | Current tag | Deployment value |
 | --- | --- | --- |
@@ -61,3 +90,156 @@ Edit or replace `maintainer/release/update_available_versions.py` if the project
 | Release Candidate | - | - |
 | Development | - | - |
 <!-- END: AVAILABLE_VERSIONS -->
+
+---
+
+## Installation
+
+This guide describes a Docker Compose deployment. The published image is built on the [11notes Python](https://github.com/11notes/docker-python) base image and is intended to run with a pinned tag, not `latest`.
+
+Searcharr-nxg does not expose a public web UI. The main runtime interface is the Telegram bot, while `settings.py` defines how the container reaches Ryot, TMDB, Radarr, and Sonarr.
+
+---
+
+#### 1. Create deployment folder
+
+```bash
+mkdir -p ~/searcharr-nxg
+cd ~/searcharr-nxg
+mkdir -p config data
+```
+
+Set permissions:
+
+```bash
+chown -R 1000:1000 config data
+chmod -R u+rwX,go-rwx config data
+```
+
+---
+
+#### 2. Create `docker-compose.yml`
+
+Create `~/searcharr-nxg/docker-compose.yml` with:
+
+```yaml
+services:
+  app:
+    image: ${PROJECT_IMAGE}
+    container_name: ${PROJECT_CONTAINER_NAME:-searcharr-nxg}
+    restart: unless-stopped
+
+    env_file:
+      - .env
+
+    environment:
+      SEARCHARR_SETTINGS_FILE: /app/settings.py
+
+    volumes:
+      - "${PROJECT_SETTINGS_FILE:-./config/settings.py}:/app/settings.py:ro"
+      - ./data:/app/data
+```
+
+If your Arr and Ryot services are reachable on a shared Docker network, add the matching `networks:` section here.
+
+---
+
+#### 3. Create `.env`
+
+Create `~/searcharr-nxg/.env` with at least:
+
+```env
+PROJECT_IMAGE=ghcr.io/brainponders/searcharr-nxg:v0.1.0
+PROJECT_CONTAINER_NAME=searcharr-nxg
+PROJECT_SETTINGS_FILE=./config/settings.py
+```
+
+> [!WARNING]
+> Always use an explicit image tag from the `Available Versions` table above.
+
+---
+
+#### 4. Create `config/settings.py`
+
+Copy the sample settings file and edit it for your environment:
+
+```bash
+cp /path/to/repo/settings-sample.py ~/searcharr-nxg/config/settings.py
+```
+
+At minimum, configure Telegram, TMDB, Ryot, and Radarr. Add Sonarr as well if series support is enabled.
+
+Searcharr-nxg expects this settings file to remain local and private. Do not commit it.
+
+---
+
+#### 5. Start Searcharr-nxg
+
+```bash
+cd ~/searcharr-nxg
+docker compose up -d
+docker compose logs -f app
+```
+
+The container starts the `searcharr-nxg` command by default. If `tgram_token` is configured, the Telegram bot starts automatically.
+
+---
+
+## Environment Variables
+
+| Variable | Description | Example |
+| --- | --- | --- |
+| `PROJECT_IMAGE` | Pinned Searcharr-nxg image tag | `ghcr.io/brainponders/searcharr-nxg:v0.1.0` |
+| `PROJECT_CONTAINER_NAME` | Container name override | `searcharr-nxg` |
+| `PROJECT_SETTINGS_FILE` | Local settings bind mount source | `./config/settings.py` |
+| `SEARCHARR_SETTINGS_FILE` | In-container settings path | `/app/settings.py` |
+
+---
+
+## First-time validation
+
+1. Start the container and confirm the expected integrations appear in the log.
+2. In Telegram, use `/start`.
+3. Test `/movie <title>`.
+4. Test `/series <title>`.
+5. Confirm the summary shows Ryot state plus the relevant Radarr or Sonarr state before you execute an action.
+
+---
+
+## Repository Layout
+
+- `src/searcharr_nxg/` contains the Python package, integrations, runtime, and Telegram bot code
+- `documentation/` contains product and governance documentation
+- `maintainer/` contains the tracked maintainer workflow, Docker assets, and release scripts
+- `docker/compose/` contains public runtime examples
+- `lang/` contains retained upstream language resources from the Searcharr lineage
+- `.local/` is the local-only safety bucket and is never committed
+
+---
+
+## Release Workflow
+
+Releases are intended to be tag-driven.
+
+- Create a Git tag following one of these formats:
+  - `vMAJOR.MINOR.PATCH`
+  - `vMAJOR.MINOR.PATCH-rc.N`
+  - `vMAJOR.MINOR.PATCH-dev.N`
+- Push the tag to GitHub
+- The GitHub Actions release workflow will:
+  - build the container image
+  - publish it to `ghcr.io/brainponders/searcharr-nxg`
+  - create a GitHub release
+  - refresh the `Available Versions` section and `docker/compose/.env.example`
+
+`latest` is intentionally not published.
+
+---
+
+## Reference Lineage
+
+Searcharr-nxg originated from Searcharr lineage, but it is now treated as a standalone project with its own architecture and release path.
+
+- historical baseline: `toddrob99/searcharr`
+
+That repository remains useful as a selective reference input, but Searcharr-nxg is no longer maintained as a direct fork continuation.

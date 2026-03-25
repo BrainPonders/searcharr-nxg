@@ -5,10 +5,11 @@
 # docs: README.md, docker/compose/.env.example
 # deployment notes:
 #   - Provide a real settings.py outside the repository before starting the container.
-#   - The scaffold runtime is long-lived but does not yet implement the Telegram service loop.
+#   - The container starts the Telegram bot automatically when tgram_token is configured.
 # history:
 #   - 2026-03-10: Initialized generic template example.
 #   - 2026-03-23: Adapted the example for Searcharr-nxg.
+#   - 2026-03-25: Updated notes for the active Telegram runtime.
 
 services:
   app:

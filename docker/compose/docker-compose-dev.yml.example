@@ -5,10 +5,11 @@
 # docs: maintainer/development/README.md, docker/compose/.env.dev.example
 # deployment notes:
 #   - The generated runtime copy is intended to live outside the repository.
-#   - The scaffold runtime is suitable for bootstrap checks, not for feature-complete service validation.
+#   - The development image can run the current Telegram bot and inspection flows.
 # history:
 #   - 2026-03-10: Initialized generic template example.
 #   - 2026-03-23: Adapted the example for Searcharr-nxg.
+#   - 2026-03-25: Updated notes for the active runtime.
 
 services:
   app:

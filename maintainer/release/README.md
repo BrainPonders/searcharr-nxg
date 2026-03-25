@@ -19,11 +19,17 @@ Both helpers are templates. Review registry names, tag policy, release channels,
 
 ## Current Project State
 
-Searcharr-nxg is still in scaffold stage. Release tags and published images are not yet the normal workflow. Until the runtime behavior is stable:
+Searcharr-nxg now has a tag-driven GitHub release path for published container images.
 
-- treat release builds as local validation only
-- do not publish images just because the helper script can build them
-- keep the README version table empty unless a real tag exists
+- public image publishing targets `ghcr.io/brainponders/searcharr-nxg`
+- release tags are expected to follow:
+  - `vMAJOR.MINOR.PATCH`
+  - `vMAJOR.MINOR.PATCH-rc.N`
+  - `vMAJOR.MINOR.PATCH-dev.N`
+- `latest` is intentionally not used
+- the release workflow also refreshes the public version table in `README.md`
+
+The local release helper still matters for validation, but the normal publication path is now GitHub Actions.
 
 ## Local Preflight
 

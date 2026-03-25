@@ -79,4 +79,4 @@ docker build \
     "$REPO_DIR"
 
 echo "Release build complete."
-echo "Push with the project-specific registry workflow after review."
+echo "Push with the GitHub Actions release workflow after review."
