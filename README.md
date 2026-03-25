@@ -81,12 +81,12 @@ Container:
 <!-- BEGIN: AVAILABLE_VERSIONS -->
 ## Available Versions
 
-This section is updated automatically from published Git tags.
-`latest` is intentionally not used.
+This optional section is updated from Git tags.
+Edit or replace the helper if the project uses a different release model.
 
 | Channel | Current tag | Deployment value |
 | --- | --- | --- |
-| Stable | - | - |
+| Stable | `v1.0.0` | `PROJECT_IMAGE=ghcr.io/brainponders/searcharr-nxg:v1.0.0` |
 | Release Candidate | - | - |
 | Development | - | - |
 <!-- END: AVAILABLE_VERSIONS -->
