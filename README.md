@@ -83,6 +83,7 @@ Container:
 
 This optional section is updated from Git tags.
 Edit or replace the helper if the project uses a different release model.
+Current temporary limitation: published images are `linux/amd64` only.
 
 | Channel | Current tag | Deployment value |
 | --- | --- | --- |
