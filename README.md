@@ -234,6 +234,10 @@ Releases are intended to be tag-driven.
 
 `latest` is intentionally not published.
 
+Current temporary limitation:
+- published images are `linux/amd64` only
+- `linux/arm64` publishing is temporarily disabled because the `11notes/python:3.12` arm64 build crashes under QEMU during dependency installation
+
 ---
 
 ## Reference Lineage

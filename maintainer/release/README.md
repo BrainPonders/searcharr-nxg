@@ -31,6 +31,11 @@ Searcharr-nxg now has a tag-driven GitHub release path for published container i
 
 The local release helper still matters for validation, but the normal publication path is now GitHub Actions.
 
+Current temporary publication limitation:
+
+- published images are `linux/amd64` only
+- `linux/arm64` publishing is temporarily disabled because the `11notes/python:3.12` arm64 build crashes under QEMU during dependency installation
+
 ## Local Preflight
 
 1. Rebuild locally.
